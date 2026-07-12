@@ -18,6 +18,9 @@ const client = new Client({
 
 // ID của Admin (Chủ Bot)
 const ADMIN_ID = process.env.ADMIN_ID || '1475874397175939225';
+// ID Danh mục (Category) để tạo kênh Ticket (Nếu để null sẽ tự do tạo)
+const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID || null;
+
 
 
 // ================= 1. ĐĂNG KÝ TẤT CẢ LỆNH SLASH =================
@@ -205,7 +208,7 @@ client.on('interactionCreate', async (interaction) => {
                 const ticketName = `ticket-${nextNum.toString().padStart(5, '0')}`;
 
                 // 2. Tạo kênh riêng tư
-                const ticketChannel = await interaction.guild.channels.create({
+                const createOptions = {
                     name: ticketName,
                     type: ChannelType.GuildText,
                     permissionOverwrites: [
@@ -222,7 +225,14 @@ client.on('interactionCreate', async (interaction) => {
                             allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
                         }
                     ],
-                });
+                };
+
+                // Nếu có cài đặt danh mục cố định
+                if (TICKET_CATEGORY_ID) {
+                    createOptions.parent = TICKET_CATEGORY_ID;
+                }
+
+                const ticketChannel = await interaction.guild.channels.create(createOptions);
 
                 await interaction.editReply({ content: `Kênh hỗ trợ của bạn đã được tạo tại: ${ticketChannel}` });
 
