@@ -137,9 +137,11 @@ client.on('ready', async () => {
             .setDescription('Gửi một tin nhắn dạng Embed (Chỉ Admin)')
             .addStringOption(option => option.setName('title').setDescription('Tiêu đề của Embed').setRequired(true))
             .addStringOption(option => option.setName('description').setDescription('Nội dung của Embed (Dùng \\n để xuống dòng)').setRequired(true))
-            .addChannelOption(option => option.setName('channel').setDescription('Kênh muốn gửi (mặc định kênh hiện tại)').setRequired(false))
-            .addStringOption(option => option.setName('color').setDescription('Màu viền dạng Hex (VD: #ff0000, #00ff00)').setRequired(false))
-            .setIntegrationTypes([0]).setContexts([0])
+            .addStringOption(option => option.setName('server').setDescription('Chọn Server muốn gửi (Chỉ cần nếu gửi từ ngoài Server)').setAutocomplete(true).setRequired(false))
+            .addStringOption(option => option.setName('channel_id').setDescription('Chọn Kênh muốn gửi (Chỉ cần nếu gửi từ ngoài Server)').setAutocomplete(true).setRequired(false))
+            .addStringOption(option => option.setName('color').setDescription('Màu viền dạng Hex (mặc định màu hồng pastel)').setRequired(false))
+            .addBooleanOption(option => option.setName('thumbnail').setDescription('Hiện ảnh server nhỏ ở góc phải (Mặc định: Bật)').setRequired(false))
+            .setIntegrationTypes([0, 1]).setContexts([0, 1, 2])
     ];
 
     const rest = new REST({ version: '10' }).setToken(client.token);
@@ -158,6 +160,48 @@ client.on('ready', async () => {
 
 // ================= 2. XỬ LÝ TƯƠNG TÁC (LỆNH SLASH & NÚT BẤM) =================
 client.on('interactionCreate', async (interaction) => {
+    
+    // ---------------- XỬ LÝ AUTOCOMPLETE ----------------
+    if (interaction.isAutocomplete()) {
+        if (interaction.commandName === 'embed') {
+            const focusedOption = interaction.options.getFocused(true);
+            
+            if (focusedOption.name === 'server') {
+                // Lọc danh sách Guilds mà bot tham gia
+                const guilds = client.guilds.cache.map(g => ({ name: g.name, value: g.id }));
+                const filtered = guilds.filter(g => g.name.toLowerCase().includes(focusedOption.value.toLowerCase())).slice(0, 25);
+                await interaction.respond(filtered).catch(console.error);
+            } 
+            else if (focusedOption.name === 'channel_id') {
+                const serverId = interaction.options.getString('server');
+                if (serverId) {
+                    const guild = client.guilds.cache.get(serverId);
+                    if (guild) {
+                        // Lọc các kênh Chat text trong server đó
+                        const channels = guild.channels.cache
+                            .filter(c => c.type === ChannelType.GuildText)
+                            .map(c => ({ name: `#${c.name}`, value: c.id }));
+                        const filtered = channels.filter(c => c.name.toLowerCase().includes(focusedOption.value.toLowerCase())).slice(0, 25);
+                        await interaction.respond(filtered).catch(console.error);
+                    } else {
+                        await interaction.respond([]).catch(console.error);
+                    }
+                } else {
+                    // Nếu chưa chọn server, có thể lọc từ server hiện tại (nếu đang ở trong server)
+                    if (interaction.guild) {
+                        const channels = interaction.guild.channels.cache
+                            .filter(c => c.type === ChannelType.GuildText)
+                            .map(c => ({ name: `#${c.name}`, value: c.id }));
+                        const filtered = channels.filter(c => c.name.toLowerCase().includes(focusedOption.value.toLowerCase())).slice(0, 25);
+                        await interaction.respond(filtered).catch(console.error);
+                    } else {
+                        await interaction.respond([]).catch(console.error);
+                    }
+                }
+            }
+        }
+        return;
+    }
     
     // ---------------- XỬ LÝ NÚT BẤM (TICKET) ----------------
     if (interaction.isButton()) {
@@ -452,27 +496,68 @@ client.on('interactionCreate', async (interaction) => {
         else if (commandName === 'embed') {
             const title = options.getString('title');
             const description = options.getString('description').replace(/\\n/g, '\n');
-            const channel = options.getChannel('channel') || interaction.channel;
-            const colorInput = options.getString('color') || '#2b2d31';
+            const colorInput = options.getString('color') || '#ffb7d2'; // Mặc định màu hồng pastel
+            const showThumbnail = options.getBoolean('thumbnail') !== false; // Mặc định: Bật (true)
+            
+            const serverId = options.getString('server');
+            const channelId = options.getString('channel_id');
+            
+            let targetGuild = interaction.guild;
+            let targetChannel = interaction.channel;
+            
+            if (serverId) {
+                targetGuild = client.guilds.cache.get(serverId);
+                if (!targetGuild) {
+                    return interaction.reply({ content: '❌ Không tìm thấy Server đã chọn hoặc Bot không có trong Server đó.', ephemeral: true });
+                }
+            }
+            
+            if (channelId) {
+                if (targetGuild) {
+                    targetChannel = targetGuild.channels.cache.get(channelId);
+                } else {
+                    targetChannel = client.channels.cache.get(channelId);
+                }
+                if (!targetChannel) {
+                    return interaction.reply({ content: '❌ Không tìm thấy Kênh đã chọn.', ephemeral: true });
+                }
+            }
+            
+            // Nếu không xác định được guild/kênh (ví dụ đang ở DM và không điền option)
+            if (!targetGuild || !targetChannel) {
+                return interaction.reply({ content: '❌ Bạn đang ở ngoài Server. Vui lòng chọn Server và Kênh muốn gửi thông báo.', ephemeral: true });
+            }
             
             // Định dạng màu hex chuẩn
             let color = colorInput;
             if (!color.startsWith('#')) color = '#' + color;
             if (!/^#[0-9A-F]{6}$/i.test(color)) {
-                color = '#2b2d31';
+                color = '#ffb7d2';
             }
             
             const embed = new EmbedBuilder()
                 .setColor(color)
-                .setTitle(title)
+                .setTitle(`✨ ${title}`)
                 .setDescription(description)
+                .setAuthor({ 
+                    name: targetGuild.name, 
+                    iconURL: targetGuild.iconURL({ dynamic: true }) || client.user.displayAvatarURL()
+                })
+                .setFooter({ 
+                    text: `Thông báo từ Ban Quản Trị • Đăng bởi ${interaction.user.username}`, 
+                    iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+                })
                 .setTimestamp();
+
+            if (showThumbnail && targetGuild.iconURL()) {
+                embed.setThumbnail(targetGuild.iconURL({ dynamic: true }));
+            }
                 
             try {
-                await channel.send({ embeds: [embed] });
-                await interaction.reply({ content: `✅ Đã gửi tin nhắn Embed đến kênh ${channel} thành công!`, ephemeral: true });
+                await targetChannel.send({ embeds: [embed] });
+                await interaction.reply({ content: `✅ Đã gửi tin nhắn Embed đến kênh ${targetChannel} của Server **${targetGuild.name}** thành công!`, ephemeral: true });
             } catch (err) {
-                await interaction.reply({ content: `❌ Thất bại! Đảm bảo Bot có quyền gửi tin nhắn và xem kênh ${channel}.`, ephemeral: true });
+                await interaction.reply({ content: `❌ Thất bại! Đảm bảo Bot có quyền gửi tin nhắn và xem kênh trong Server đó.`, ephemeral: true });
             }
         }
 
