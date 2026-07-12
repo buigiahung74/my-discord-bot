@@ -535,28 +535,43 @@ client.on('interactionCreate', async (interaction) => {
                 color = '#ffb7d2';
             }
             
+            // Bố cục mô tả dễ đọc hơn và tag Admin
+            let formattedDescription = `\n${description}\n\n`;
+            formattedDescription += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            formattedDescription += `👑 **Quản trị viên:** <@${ADMIN_ID}>\n`;
+            formattedDescription += `💬 *Hãy liên hệ Admin nếu bạn cần hỗ trợ thêm!*`;
+            
             const embed = new EmbedBuilder()
                 .setColor(color)
                 .setTitle(`✨ ${title}`)
-                .setDescription(description)
+                .setDescription(formattedDescription)
                 .setAuthor({ 
                     name: targetGuild.name, 
                     iconURL: targetGuild.iconURL({ dynamic: true }) || client.user.displayAvatarURL()
                 })
                 .setFooter({ 
-                    text: `Thông báo từ Ban Quản Trị • Đăng bởi ${interaction.user.username}`, 
+                    text: `Thông báo Hệ Thống • Đăng bởi ${interaction.user.username}`, 
                     iconURL: interaction.user.displayAvatarURL({ dynamic: true })
                 })
                 .setTimestamp();
 
-            if (showThumbnail && targetGuild.iconURL()) {
-                embed.setThumbnail(targetGuild.iconURL({ dynamic: true }));
+            const files = [];
+            if (showThumbnail) {
+                const fs = require('fs');
+                if (fs.existsSync('./logo_chu_p.png')) {
+                    const logoAttachment = new AttachmentBuilder('./logo_chu_p.png', { name: 'logo_chu_p.png' });
+                    embed.setThumbnail('attachment://logo_chu_p.png');
+                    files.push(logoAttachment);
+                } else if (targetGuild.iconURL()) {
+                    embed.setThumbnail(targetGuild.iconURL({ dynamic: true }));
+                }
             }
                 
             try {
-                await targetChannel.send({ embeds: [embed] });
+                await targetChannel.send({ embeds: [embed], files: files });
                 await interaction.reply({ content: `✅ Đã gửi tin nhắn Embed đến kênh ${targetChannel} của Server **${targetGuild.name}** thành công!`, ephemeral: true });
             } catch (err) {
+                console.error(err);
                 await interaction.reply({ content: `❌ Thất bại! Đảm bảo Bot có quyền gửi tin nhắn và xem kênh trong Server đó.`, ephemeral: true });
             }
         }
