@@ -50,6 +50,24 @@ client.on('ready', async () => {
             .addStringOption(option => option.setName('emoji').setDescription('Nhập/Dán emoji cần lấy hình').setRequired(true))
             .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
 
+        new SlashCommandBuilder()
+            .setName('ping')
+            .setDescription('Kiểm tra độ trễ (ping/latency) của Bot')
+            .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
+
+        new SlashCommandBuilder()
+            .setName('userinfo')
+            .setDescription('Xem thông tin chi tiết của một người dùng')
+            .addUserOption(option => option.setName('target').setDescription('Người dùng cần xem').setRequired(false))
+            .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
+
+        new SlashCommandBuilder()
+            .setName('shorturl')
+            .setDescription('Rút gọn một liên kết dài')
+            .addStringOption(option => option.setName('link').setDescription('Dán liên kết cần rút gọn').setRequired(true))
+            .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
+
+
 
         // --- CÁC LỆNH CHỈ DÙNG TRONG SERVER (QUẢN TRỊ) ---
         new SlashCommandBuilder()
@@ -112,6 +130,15 @@ client.on('ready', async () => {
             .setName('unban')
             .setDescription('Bỏ ban người dùng')
             .addStringOption(option => option.setName('userid').setDescription('ID của người cần unban').setRequired(true))
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('embed')
+            .setDescription('Gửi một tin nhắn dạng Embed (Chỉ Admin)')
+            .addStringOption(option => option.setName('title').setDescription('Tiêu đề của Embed').setRequired(true))
+            .addStringOption(option => option.setName('description').setDescription('Nội dung của Embed (Dùng \\n để xuống dòng)').setRequired(true))
+            .addChannelOption(option => option.setName('channel').setDescription('Kênh muốn gửi (mặc định kênh hiện tại)').setRequired(false))
+            .addStringOption(option => option.setName('color').setDescription('Màu viền dạng Hex (VD: #ff0000, #00ff00)').setRequired(false))
             .setIntegrationTypes([0]).setContexts([0])
     ];
 
@@ -219,10 +246,14 @@ client.on('interactionCreate', async (interaction) => {
     // ---------------- XỬ LÝ LỆNH SLASH ----------------
     if (!interaction.isChatInputCommand()) return;
 
-    // KIỂM TRA QUYỀN ADMIN CHO TẤT CẢ LỆNH SLASH
-    if (interaction.user.id !== ADMIN_ID) {
+    // DANH SÁCH LỆNH CÔNG KHAI (MỌI NGƯỜI ĐỀU DÙNG ĐƯỢC)
+    const publicCommands = ['qr', 'avt', 'translate', 'geticon', 'ping', 'userinfo', 'shorturl'];
+
+    // KIỂM TRA QUYỀN ADMIN CHO CÁC LỆNH CÒN LẠI
+    if (!publicCommands.includes(commandName) && interaction.user.id !== ADMIN_ID) {
         return interaction.reply({ content: 'Bạn không có quyền sử dụng lệnh này!', ephemeral: true });
     }
+
 
     const { commandName, options } = interaction;
 
@@ -331,6 +362,117 @@ client.on('interactionCreate', async (interaction) => {
                 } else {
                     await interaction.reply({ content: '❌ Vui lòng nhập đúng 1 emoji hợp lệ.', ephemeral: true });
                 }
+            }
+        }
+
+        // Lệnh Ping
+        else if (commandName === 'ping') {
+            const sent = await interaction.reply({ content: 'Đang đo độ trễ...', fetchReply: true });
+            const latency = sent.createdTimestamp - interaction.createdTimestamp;
+            const apiPing = client.ws.ping;
+            
+            const pingEmbed = new EmbedBuilder()
+                .setColor('#00ff88')
+                .setTitle('⚡ ĐỘ TRỄ HỆ THỐNG')
+                .addFields(
+                    { name: '📶 Phản hồi của Bot', value: `${latency}ms`, inline: true },
+                    { name: '🤖 Kết nối Discord API', value: `${apiPing}ms`, inline: true }
+                )
+                .setTimestamp();
+            await interaction.editReply({ content: null, embeds: [pingEmbed] });
+        }
+
+        // Lệnh UserInfo
+        else if (commandName === 'userinfo') {
+            const targetUser = options.getUser('target') || interaction.user;
+            let targetMember = null;
+            if (interaction.guild) {
+                targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            }
+            
+            const creationDate = `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:F> (<t:${Math.floor(targetUser.createdTimestamp / 1000)}:R>)`;
+            const joinDate = targetMember ? `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:F> (<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:R>)` : 'Không thuộc server này';
+            const roles = targetMember ? targetMember.roles.cache.filter(r => r.id !== interaction.guild.id).map(r => r.toString()).join(', ') || 'Không có' : 'N/A';
+            
+            const embed = new EmbedBuilder()
+                .setColor('Random')
+                .setTitle(`Thông tin thành viên: ${targetUser.tag}`)
+                .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+                .addFields(
+                    { name: '🆔 ID Người Dùng', value: targetUser.id, inline: true },
+                    { name: '🤖 Loại Tài Khoản', value: targetUser.bot ? 'Tài khoản Bot' : 'Người dùng thường', inline: true },
+                    { name: '📅 Ngày Tạo Tài Khoản', value: creationDate },
+                    { name: '📥 Ngày Tham Gia Server', value: joinDate }
+                );
+                
+            if (interaction.guild && targetMember) {
+                embed.addFields({ name: '🎭 Vai trò (Roles)', value: roles });
+            }
+            
+            await interaction.reply({ embeds: [embed] });
+        }
+
+        // Lệnh Short URL
+        else if (commandName === 'shorturl') {
+            await interaction.deferReply();
+            const longUrl = options.getString('link');
+            
+            if (!/^https?:\/\/.+/i.test(longUrl)) {
+                return interaction.editReply({ content: '❌ Định dạng liên kết không hợp lệ. Vui lòng nhập link bắt đầu bằng `http://` hoặc `https://`.' });
+            }
+            
+            const https = require('https');
+            const apiUrl = `https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`;
+            
+            https.get(apiUrl, (res) => {
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', async () => {
+                    if (res.statusCode === 200 && data.startsWith('http')) {
+                        const embed = new EmbedBuilder()
+                            .setColor('#00ff88')
+                            .setTitle('🔗 Rút Gọn Liên Kết Thành Công')
+                            .addFields(
+                                { name: 'Liên kết gốc', value: longUrl },
+                                { name: 'Liên kết rút gọn', value: data }
+                            )
+                            .setTimestamp();
+                        await interaction.editReply({ embeds: [embed] });
+                    } else {
+                        await interaction.editReply({ content: '❌ Lỗi từ dịch vụ rút gọn liên kết. Vui lòng thử lại sau.' });
+                    }
+                });
+            }).on('error', async (err) => {
+                console.error(err);
+                await interaction.editReply({ content: '❌ Không thể kết nối tới máy chủ rút gọn liên kết.' });
+            });
+        }
+
+        // Lệnh Embed (Chỉ dành cho Admin)
+        else if (commandName === 'embed') {
+            const title = options.getString('title');
+            const description = options.getString('description').replace(/\\n/g, '\n');
+            const channel = options.getChannel('channel') || interaction.channel;
+            const colorInput = options.getString('color') || '#2b2d31';
+            
+            // Định dạng màu hex chuẩn
+            let color = colorInput;
+            if (!color.startsWith('#')) color = '#' + color;
+            if (!/^#[0-9A-F]{6}$/i.test(color)) {
+                color = '#2b2d31';
+            }
+            
+            const embed = new EmbedBuilder()
+                .setColor(color)
+                .setTitle(title)
+                .setDescription(description)
+                .setTimestamp();
+                
+            try {
+                await channel.send({ embeds: [embed] });
+                await interaction.reply({ content: `✅ Đã gửi tin nhắn Embed đến kênh ${channel} thành công!`, ephemeral: true });
+            } catch (err) {
+                await interaction.reply({ content: `❌ Thất bại! Đảm bảo Bot có quyền gửi tin nhắn và xem kênh ${channel}.`, ephemeral: true });
             }
         }
 
@@ -449,6 +591,10 @@ client.on('messageCreate', async (message) => {
                 { name: '/qr', value: 'Gửi ảnh QR thanh toán (Dùng được ở mọi nơi)' },
                 { name: '/avt', value: 'Xem avatar (Dùng được ở mọi nơi)' },
                 { name: '/geticon', value: 'Lấy ảnh emoji/icon chất lượng cao (Dùng được ở mọi nơi)' },
+                { name: '/ping', value: 'Kiểm tra độ trễ của Bot (Mọi nơi)' },
+                { name: '/userinfo', value: 'Xem thông tin chi tiết một người dùng (Mọi nơi)' },
+                { name: '/shorturl', value: 'Rút gọn một liên kết dài (Mọi nơi)' },
+                { name: '/embed', value: 'Gửi tin nhắn khung Embed (Chỉ Admin)' },
                 { name: '/clear', value: 'Xóa tin nhắn' },
                 { name: '/nuke', value: 'Xóa và tạo lại kênh' },
                 { name: '/clean', value: 'Tạo kênh mới giống kênh hiện tại' },
