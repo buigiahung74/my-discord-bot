@@ -44,6 +44,13 @@ client.on('ready', async () => {
             .addStringOption(option => option.setName('text').setDescription('Văn bản cần dịch').setRequired(true))
             .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
 
+        new SlashCommandBuilder()
+            .setName('geticon')
+            .setDescription('Lấy ảnh chất lượng cao của một emoji/icon')
+            .addStringOption(option => option.setName('emoji').setDescription('Nhập/Dán emoji cần lấy hình').setRequired(true))
+            .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
+
+
         // --- CÁC LỆNH CHỈ DÙNG TRONG SERVER (QUẢN TRỊ) ---
         new SlashCommandBuilder()
             .setName('ticketsetup')
@@ -281,6 +288,53 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.reply({ embeds: [avatarEmbed] });
         }
 
+        // Lệnh Get Icon
+        else if (commandName === 'geticon') {
+            const emojiInput = options.getString('emoji').trim();
+            
+            // Regex match emoji custom: <:name:id> hoặc <a:name:id>
+            const customEmojiRegex = /<(a)?:([^:]+):(\d+)>/;
+            const match = emojiInput.match(customEmojiRegex);
+            
+            if (match) {
+                const isAnimated = !!match[1];
+                const emojiName = match[2];
+                const emojiId = match[3];
+                const extension = isAnimated ? 'gif' : 'png';
+                const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}?size=1024`;
+                
+                const embed = new EmbedBuilder()
+                    .setColor('#00ff88')
+                    .setTitle(`Emoji: :${emojiName}:`)
+                    .setDescription(`[Nhấn vào đây để tải về](${emojiUrl})`)
+                    .setImage(emojiUrl)
+                    .setFooter({ text: `ID: ${emojiId} | Định dạng: ${extension.toUpperCase()}` });
+                
+                await interaction.reply({ embeds: [embed] });
+            } else {
+                // Nhận dạng emoji mặc định (Unicode)
+                const codePoints = Array.from(emojiInput).map(char => char.codePointAt(0).toString(16)).join('-');
+                
+                if (codePoints && !codePoints.includes(' ')) {
+                    const twemojiUrl = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/${codePoints}.png`;
+                    
+                    const embed = new EmbedBuilder()
+                        .setColor('#ffaa00')
+                        .setTitle(`Emoji mặc định (Unicode)`)
+                        .setDescription(`[Nhấn vào đây để tải về](${twemojiUrl})`)
+                        .setImage(twemojiUrl)
+                        .setFooter({ text: `Code points: ${codePoints}` });
+                    
+                    await interaction.reply({ embeds: [embed] }).catch(async () => {
+                        await interaction.reply({ content: '❌ Không tìm thấy ảnh cho emoji này. Hãy thử nhập emoji tùy chỉnh (custom emoji) của Server.', ephemeral: true });
+                    });
+                } else {
+                    await interaction.reply({ content: '❌ Vui lòng nhập đúng 1 emoji hợp lệ.', ephemeral: true });
+                }
+            }
+        }
+
+
         // Các lệnh quản trị cũ...
         else if (commandName === 'clear') {
             const amount = options.getInteger('amount');
@@ -394,6 +448,7 @@ client.on('messageCreate', async (message) => {
                 { name: '/translate', value: 'Dịch văn bản (Dùng được ở mọi nơi)' },
                 { name: '/qr', value: 'Gửi ảnh QR thanh toán (Dùng được ở mọi nơi)' },
                 { name: '/avt', value: 'Xem avatar (Dùng được ở mọi nơi)' },
+                { name: '/geticon', value: 'Lấy ảnh emoji/icon chất lượng cao (Dùng được ở mọi nơi)' },
                 { name: '/clear', value: 'Xóa tin nhắn' },
                 { name: '/nuke', value: 'Xóa và tạo lại kênh' },
                 { name: '/clean', value: 'Tạo kênh mới giống kênh hiện tại' },
