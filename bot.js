@@ -246,6 +246,8 @@ client.on('interactionCreate', async (interaction) => {
     // ---------------- XỬ LÝ LỆNH SLASH ----------------
     if (!interaction.isChatInputCommand()) return;
 
+    const { commandName, options } = interaction;
+
     // DANH SÁCH LỆNH CÔNG KHAI (MỌI NGƯỜI ĐỀU DÙNG ĐƯỢC)
     const publicCommands = ['qr', 'avt', 'translate', 'geticon', 'ping', 'userinfo', 'shorturl'];
 
@@ -254,8 +256,6 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.reply({ content: 'Bạn không có quyền sử dụng lệnh này!', ephemeral: true });
     }
 
-
-    const { commandName, options } = interaction;
 
     try {
         // Lệnh Ticket Setup
