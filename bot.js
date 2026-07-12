@@ -264,6 +264,48 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.reply('Kênh này sẽ bị xóa sau 3 giây...');
             setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
         }
+
+        // --- XỬ LÝ NÚT BẤM MENU DM ---
+        if (interaction.customId === 'dm_buy') {
+            const embed = new EmbedBuilder()
+                .setColor('#ffb7d2')
+                .setTitle('🛍️ DANH SÁCH SẢN PHẨM & BẢNG GIÁ')
+                .setDescription('Hiện tại shop chúng mình cung cấp các dịch vụ/phần mềm sau:\n\n> 1. **Key Premium A** - Giá: `50.000đ` / tháng\n> 2. **Key Premium B** - Giá: `100.000đ` / tháng\n> 3. **Gói Setup Trọn Gói** - Giá: Liên hệ Admin\n\n👉 *Vui lòng nhấn nút **Thanh Toán (QR)** để lấy thông tin chuyển khoản, hoặc **Liên Hệ Admin** để chốt đơn!*');
+            return interaction.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
+        }
+        
+        if (interaction.customId === 'dm_support') {
+            const embed = new EmbedBuilder()
+                .setColor('#ffb7d2')
+                .setTitle('🔧 HỖ TRỢ KỸ THUẬT')
+                .setDescription('Để được hỗ trợ kỹ thuật nhanh nhất, bạn vui lòng:\n\n> 1. Tham gia vào server Discord chính thức của chúng mình.\n> 2. Di chuyển tới kênh hỗ trợ và sử dụng lệnh `/ticketsetup` (hoặc bấm vào nút Tạo Ticket có sẵn trong server).\n> 3. Để lại câu hỏi hoặc lỗi bạn gặp phải trong kênh Ticket riêng tư vừa tạo, Admin sẽ hỗ trợ bạn sớm nhất!');
+            return interaction.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
+        }
+        
+        if (interaction.customId === 'dm_pay') {
+            const embed = new EmbedBuilder()
+                .setColor('#ffb7d2')
+                .setTitle('💳 THÔNG TIN THANH TOÁN')
+                .setDescription(`Bạn vui lòng chuyển khoản theo thông tin dưới đây:\n\n👑 **Admin:** <@${ADMIN_ID}>\n📝 **Nội dung chuyển khoản:** \`Tên_Discord của bạn + Tên sản phẩm\`\n\n*Ảnh QR thanh toán đã được đính kèm ở dưới!*`);
+            
+            const fs = require('fs');
+            const path = require('path');
+            const qrPath = path.join(__dirname, 'qr.jpg');
+            const files = [];
+            if (fs.existsSync(qrPath)) {
+                files.push(new AttachmentBuilder(qrPath));
+            }
+            return interaction.reply({ embeds: [embed], files: files, ephemeral: true }).catch(() => {});
+        }
+        
+        if (interaction.customId === 'dm_contact') {
+            const embed = new EmbedBuilder()
+                .setColor('#ffb7d2')
+                .setTitle('👑 LIÊN HỆ BAN QUẢN TRỊ')
+                .setDescription(`Bạn có thể nhắn tin trực tiếp hoặc tag Admin tại đây để nhận hỗ trợ trực tiếp:\n\n👑 **Admin / Founder:** <@${ADMIN_ID}>\n\n*Chúng mình sẽ cố gắng phản hồi bạn nhanh nhất có thể! Cảm ơn bạn!*`);
+            return interaction.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
+        }
+
         return; // Kết thúc xử lý nút bấm
     }
 
@@ -638,12 +680,77 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// ================= 3. XỬ LÝ LỆNH TIN NHẮN (CHỈ CÒN 1HELP) =================
+// ================= 3. XỬ LÝ LỆNH TIN NHẮN (CHỈ CÒN 1HELP & DM AUTO REPLY) =================
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-    if (message.author.id !== ADMIN_ID) return;
 
-    if (message.content.trim().toLowerCase() === '1help') {
+    // --- TỰ ĐỘNG PHẢN HỒI KHI CÓ NGƯỜI IB (DM) CHO BOT ---
+    if (message.channel.type === ChannelType.DM) {
+        // Nếu là Admin nhắn tin '1help' thì vẫn xử lý như cũ
+        if (message.author.id === ADMIN_ID && message.content.trim().toLowerCase() === '1help') {
+            const helpEmbed = new EmbedBuilder()
+                .setColor('#0099ff')
+                .setTitle('Danh sách lệnh của Bot (Chỉ Admin)')
+                .setDescription('Tất cả các lệnh quản trị giờ đây đã được chuyển thành lệnh Slash (`/`). Hãy gõ `/` để xem danh sách lệnh.')
+                .addFields(
+                    { name: '1help', value: 'Hiện danh sách lệnh này' },
+                    { name: '/ticketsetup', value: 'Tạo bảng nút bấm hỗ trợ mua hàng' },
+                    { name: '/translate', value: 'Dịch văn bản (Dùng được ở mọi nơi)' },
+                    { name: '/qr', value: 'Gửi ảnh QR thanh toán (Dùng được ở mọi nơi)' },
+                    { name: '/avt', value: 'Xem avatar (Dùng được ở mọi nơi)' },
+                    { name: '/geticon', value: 'Lấy ảnh emoji/icon chất lượng cao (Dùng được ở mọi nơi)' },
+                    { name: '/ping', value: 'Kiểm tra độ trễ của Bot (Mọi nơi)' },
+                    { name: '/userinfo', value: 'Xem thông tin chi tiết một người dùng (Mọi nơi)' },
+                    { name: '/shorturl', value: 'Rút gọn một liên kết dài (Mọi nơi)' },
+                    { name: '/embed', value: 'Gửi tin nhắn khung Embed (Chỉ Admin)' },
+                    { name: '/clear', value: 'Xóa tin nhắn' },
+                    { name: '/nuke', value: 'Xóa và tạo lại kênh' },
+                    { name: '/clean', value: 'Tạo kênh mới giống kênh hiện tại' },
+                    { name: '/lock', value: 'Khóa kênh' },
+                    { name: '/serverstatus', value: 'Xem thông tin server' },
+                    { name: '/mute', value: 'Mute người dùng' },
+                    { name: '/unmute', value: 'Bỏ mute' },
+                    { name: '/kick', value: 'Kick người dùng' },
+                    { name: '/ban', value: 'Ban người dùng' },
+                    { name: '/unban', value: 'Unban người dùng' }
+                );
+            return message.reply({ embeds: [helpEmbed] });
+        }
+
+        // Với người dùng khác ib cho bot, gửi menu tự động
+        const menuEmbed = new EmbedBuilder()
+            .setColor('#ffb7d2') // Màu hồng pastel mặc định
+            .setTitle('🤖 TRUNG TÂM PHẢN HỒI TỰ ĐỘNG')
+            .setDescription(`Xin chào **${message.author.username}**,\nCảm ơn bạn đã nhắn tin cho bot của **PhoeNexHax Store**! \n\nVui lòng chọn một nút bên dưới để được hỗ trợ tự động ngay lập tức:`)
+            .setTimestamp();
+
+        const btnBuy = new ButtonBuilder()
+            .setCustomId('dm_buy')
+            .setLabel('🛍️ Mua Sản Phẩm')
+            .setStyle(ButtonStyle.Primary);
+
+        const btnSupport = new ButtonBuilder()
+            .setCustomId('dm_support')
+            .setLabel('🔧 Hỗ Trợ Kỹ Thuật')
+            .setStyle(ButtonStyle.Success);
+
+        const btnPay = new ButtonBuilder()
+            .setCustomId('dm_pay')
+            .setLabel('💳 Thanh Toán (QR)')
+            .setStyle(ButtonStyle.Secondary);
+
+        const btnContact = new ButtonBuilder()
+            .setCustomId('dm_contact')
+            .setLabel('👑 Liên Hệ Admin')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder().addComponents(btnBuy, btnSupport, btnPay, btnContact);
+
+        return message.reply({ embeds: [menuEmbed], components: [row] }).catch(console.error);
+    }
+
+    // Nếu nhắn trong Server
+    if (message.author.id === ADMIN_ID && message.content.trim().toLowerCase() === '1help') {
         const helpEmbed = new EmbedBuilder()
             .setColor('#0099ff')
             .setTitle('Danh sách lệnh của Bot (Chỉ Admin)')
