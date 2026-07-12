@@ -558,8 +558,11 @@ client.on('interactionCreate', async (interaction) => {
             const files = [];
             if (showThumbnail) {
                 const fs = require('fs');
-                if (fs.existsSync('./logo_chu_p.png')) {
-                    const logoAttachment = new AttachmentBuilder('./logo_chu_p.png', { name: 'logo_chu_p.png' });
+                const path = require('path');
+                const logoPath = path.join(__dirname, 'logo_chu_p.png');
+                
+                if (fs.existsSync(logoPath)) {
+                    const logoAttachment = new AttachmentBuilder(logoPath, { name: 'logo_chu_p.png' });
                     embed.setThumbnail('attachment://logo_chu_p.png');
                     files.push(logoAttachment);
                 } else if (targetGuild.iconURL()) {
