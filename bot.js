@@ -1,0 +1,426 @@
+const { 
+    Client, GatewayIntentBits, Partials, EmbedBuilder, AttachmentBuilder, 
+    REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, 
+    ButtonStyle, ChannelType, PermissionFlagsBits 
+} = require('discord.js');
+
+// Khởi tạo Client
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages
+    ],
+    partials: [Partials.Channel]
+});
+
+// ID của Admin (Chủ Bot)
+const ADMIN_ID = process.env.ADMIN_ID || '1475874397175939225';
+
+
+// ================= 1. ĐĂNG KÝ TẤT CẢ LỆNH SLASH =================
+client.on('ready', async () => {
+    console.log(`Bot đã sẵn sàng! Đăng nhập với tên: ${client.user.tag}`);
+
+    const commands = [
+        // --- CÁC LỆNH DÙNG ĐƯỢC Ở MỌI NƠI (USER APP) ---
+        new SlashCommandBuilder()
+            .setName('qr')
+            .setDescription('Gửi ảnh QR thanh toán của Admin')
+            .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
+            
+        new SlashCommandBuilder()
+            .setName('avt')
+            .setDescription('Xem avatar của người dùng')
+            .addUserOption(option => option.setName('target').setDescription('Người bạn muốn xem avatar').setRequired(false))
+            .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
+
+        new SlashCommandBuilder()
+            .setName('translate')
+            .setDescription('Dịch văn bản sang ngôn ngữ khác')
+            .addStringOption(option => option.setName('lang').setDescription('Mã ngôn ngữ đích (VD: vi, en, ja, ko, zh)').setRequired(true))
+            .addStringOption(option => option.setName('text').setDescription('Văn bản cần dịch').setRequired(true))
+            .setIntegrationTypes([0, 1]).setContexts([0, 1, 2]),
+
+        // --- CÁC LỆNH CHỈ DÙNG TRONG SERVER (QUẢN TRỊ) ---
+        new SlashCommandBuilder()
+            .setName('ticketsetup')
+            .setDescription('Tạo bảng nút bấm Ticket hỗ trợ mua hàng')
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('clear')
+            .setDescription('Xóa số lượng tin nhắn chỉ định')
+            .addIntegerOption(option => option.setName('amount').setDescription('Số lượng (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('nuke')
+            .setDescription('Xóa toàn bộ tin nhắn trong kênh (Xóa kênh và tạo lại)')
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('clean')
+            .setDescription('Tạo một kênh mới giống y hệt kênh hiện tại')
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('lock')
+            .setDescription('Khóa kênh, không cho @everyone nhắn tin')
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('serverstatus')
+            .setDescription('Xem thông tin server')
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('mute')
+            .setDescription('Mute người dùng theo thời gian')
+            .addUserOption(option => option.setName('target').setDescription('Người cần mute').setRequired(true))
+            .addStringOption(option => option.setName('time').setDescription('Thời gian (VD: 1s, 1m, 1h, 1d)').setRequired(true))
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('unmute')
+            .setDescription('Bỏ mute người dùng')
+            .addUserOption(option => option.setName('target').setDescription('Người cần bỏ mute').setRequired(true))
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('kick')
+            .setDescription('Đuổi người dùng khỏi server')
+            .addUserOption(option => option.setName('target').setDescription('Người cần kick').setRequired(true))
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('ban')
+            .setDescription('Ban người dùng và xóa tin nhắn (7 ngày)')
+            .addUserOption(option => option.setName('target').setDescription('Người cần ban').setRequired(true))
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('unban')
+            .setDescription('Bỏ ban người dùng')
+            .addStringOption(option => option.setName('userid').setDescription('ID của người cần unban').setRequired(true))
+            .setIntegrationTypes([0]).setContexts([0])
+    ];
+
+    const rest = new REST({ version: '10' }).setToken(client.token);
+
+    try {
+        console.log('Đang đăng ký các lệnh Slash...');
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: commands.map(c => c.toJSON()) }
+        );
+        console.log('Đã đăng ký toàn bộ lệnh Slash thành công!');
+    } catch (error) {
+        console.error('Lỗi khi đăng ký lệnh Slash:', error);
+    }
+});
+
+// ================= 2. XỬ LÝ TƯƠNG TÁC (LỆNH SLASH & NÚT BẤM) =================
+client.on('interactionCreate', async (interaction) => {
+    
+    // ---------------- XỬ LÝ NÚT BẤM (TICKET) ----------------
+    if (interaction.isButton()) {
+        
+        // NÚT TẠO TICKET
+        if (interaction.customId === 'create_ticket') {
+            await interaction.reply({ content: 'Đang tạo kênh hỗ trợ cho bạn...', ephemeral: true });
+
+            try {
+                // 1. Tìm số thứ tự Ticket tiếp theo (00000, 00001...)
+                const ticketChannels = interaction.guild.channels.cache.filter(c => c.name.startsWith('ticket-'));
+                let nextNum = 0;
+                if (ticketChannels.size > 0) {
+                    const nums = ticketChannels.map(c => {
+                        const match = c.name.match(/\d+/);
+                        return match ? parseInt(match[0]) : 0;
+                    });
+                    nextNum = Math.max(...nums) + 1;
+                }
+                // Format số thành 5 chữ số (VD: 00001)
+                const ticketName = `ticket-${nextNum.toString().padStart(5, '0')}`;
+
+                // 2. Tạo kênh riêng tư
+                const ticketChannel = await interaction.guild.channels.create({
+                    name: ticketName,
+                    type: ChannelType.GuildText,
+                    permissionOverwrites: [
+                        {
+                            id: interaction.guild.id, // @everyone
+                            deny: [PermissionFlagsBits.ViewChannel], // Ẩn với tất cả mọi người
+                        },
+                        {
+                            id: interaction.user.id, // Người bấm nút
+                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+                        },
+                        {
+                            id: ADMIN_ID, // ID của Chủ Bot (Founder)
+                            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+                        }
+                    ],
+                });
+
+                await interaction.editReply({ content: `Kênh hỗ trợ của bạn đã được tạo tại: ${ticketChannel}` });
+
+                // 3. Gửi lời chào vào kênh Ticket
+                const welcomeEmbed = new EmbedBuilder()
+                    .setColor('#00ff88')
+                    .setTitle(`Hỗ trợ khách hàng | ${ticketName}`)
+                    .setDescription(`Cảm ơn bạn đã quan tâm đến dịch vụ của chúng mình!\n\nVui lòng để lại yêu cầu hoặc câu hỏi của bạn ở đây. Quản trị viên sẽ vào hỗ trợ bạn trong thời gian sớm nhất.`);
+                
+                const closeBtn = new ButtonBuilder()
+                    .setCustomId('close_ticket')
+                    .setLabel('🔒 Đóng Ticket (Chỉ Admin)')
+                    .setStyle(ButtonStyle.Danger);
+                
+                const row = new ActionRowBuilder().addComponents(closeBtn);
+
+                await ticketChannel.send({
+                    content: `Xin chào <@${interaction.user.id}>,`,
+                    embeds: [welcomeEmbed],
+                    components: [row]
+                });
+
+            } catch (error) {
+                console.error(error);
+                await interaction.editReply({ content: 'Đã xảy ra lỗi khi tạo ticket. Vui lòng kiểm tra lại quyền của bot.' });
+            }
+        }
+
+        // NÚT ĐÓNG TICKET
+        if (interaction.customId === 'close_ticket') {
+            // Kiểm tra quyền: Chỉ Chủ Bot HOẶC người có quyền Quản lý Server mới được đóng
+            const isBotOwner = interaction.user.id === ADMIN_ID;
+            const isServerManager = interaction.member.permissions.has(PermissionFlagsBits.ManageChannels) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+
+            if (!isBotOwner && !isServerManager) {
+                return interaction.reply({ content: '❌ Chỉ có Quản trị viên mới có quyền đóng Ticket này!', ephemeral: true });
+            }
+
+            await interaction.reply('Kênh này sẽ bị xóa sau 3 giây...');
+            setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
+        }
+        return; // Kết thúc xử lý nút bấm
+    }
+
+    // ---------------- XỬ LÝ LỆNH SLASH ----------------
+    if (!interaction.isChatInputCommand()) return;
+
+    // KIỂM TRA QUYỀN ADMIN CHO TẤT CẢ LỆNH SLASH
+    if (interaction.user.id !== ADMIN_ID) {
+        return interaction.reply({ content: 'Bạn không có quyền sử dụng lệnh này!', ephemeral: true });
+    }
+
+    const { commandName, options } = interaction;
+
+    try {
+        // Lệnh Ticket Setup
+        if (commandName === 'ticketsetup') {
+            const embed = new EmbedBuilder()
+                .setColor('#2b2d31')
+                .setTitle('🎧 TRUNG TÂM HỖ TRỢ KHÁCH HÀNG')
+                .setDescription('🎯 **Bạn có thể mở Ticket để yêu cầu:**\n\n> 🛒 Tư vấn & Đăng ký mua sản phẩm\n> ⚠️ Báo cáo lỗi hoặc sự cố kỹ thuật\n> 🛠️ Yêu cầu hỗ trợ trong quá trình sử dụng\n> ⚖️ Phản ánh, khiếu nại về chất lượng dịch vụ\n> ❓ Giải đáp các thắc mắc khác\n\n👉 **Nhấn vào nút bên dưới để kết nối trực tiếp với đội ngũ Admin nhé 📩**')
+                .setFooter({ text: 'Hệ thống hỗ trợ tự động', iconURL: interaction.guild.iconURL() });
+            
+            const btn = new ButtonBuilder()
+                .setCustomId('create_ticket')
+                .setLabel('📩 Tạo Ticket Hỗ Trợ')
+                .setStyle(ButtonStyle.Primary);
+            
+            const row = new ActionRowBuilder().addComponents(btn);
+
+            await interaction.reply({ embeds: [embed], components: [row] });
+        }
+
+        // Lệnh Translate
+        else if (commandName === 'translate') {
+            await interaction.deferReply();
+            const lang = options.getString('lang');
+            const text = options.getString('text');
+            
+            try {
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${lang}&dt=t&q=${encodeURIComponent(text)}`;
+                const response = await fetch(url);
+                const json = await response.json();
+                
+                const translatedText = json[0].map(item => item[0]).join('');
+                
+                const transEmbed = new EmbedBuilder()
+                    .setColor('Random')
+                    .setTitle('Google Dịch')
+                    .addFields(
+                        { name: 'Văn bản gốc', value: text },
+                        { name: `Dịch sang (${lang})`, value: translatedText }
+                    );
+                await interaction.editReply({ embeds: [transEmbed] });
+            } catch (err) {
+                await interaction.editReply({ content: 'Đã xảy ra lỗi khi dịch văn bản. Vui lòng thử lại sau.' });
+            }
+        }
+
+        // Lệnh QR
+        else if (commandName === 'qr') {
+            await interaction.deferReply();
+            const qrImage = new AttachmentBuilder('./qr.jpg');
+            await interaction.editReply({ content: 'Đây là mã QR của Admin:', files: [qrImage] });
+        }
+
+        // Lệnh Avatar
+        else if (commandName === 'avt') {
+            const target = options.getUser('target') || interaction.user;
+            const avatarEmbed = new EmbedBuilder()
+                .setColor('Random')
+                .setTitle(`Avatar của ${target.tag}`)
+                .setImage(target.displayAvatarURL({ size: 1024, dynamic: true }));
+            await interaction.reply({ embeds: [avatarEmbed] });
+        }
+
+        // Các lệnh quản trị cũ...
+        else if (commandName === 'clear') {
+            const amount = options.getInteger('amount');
+            await interaction.channel.bulkDelete(amount, true);
+            await interaction.reply({ content: `Đã xóa ${amount} tin nhắn.`, ephemeral: true });
+        }
+
+        else if (commandName === 'nuke') {
+            await interaction.reply({ content: 'Đang nuke kênh này...', ephemeral: true });
+            const channel = interaction.channel;
+            const clonedChannel = await channel.clone();
+            await clonedChannel.setPosition(channel.position);
+            await channel.delete();
+            clonedChannel.send('Kênh đã được nuke thành công! 💥');
+        }
+
+        else if (commandName === 'clean') {
+            await interaction.channel.clone();
+            await interaction.reply({ content: 'Đã tạo một kênh mới giống y hệt kênh này.', ephemeral: true });
+        }
+
+        else if (commandName === 'lock') {
+            await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false });
+            await interaction.reply({ content: 'Kênh này đã bị khóa. @everyone không thể gửi tin nhắn nữa 🔒' });
+        }
+
+        else if (commandName === 'serverstatus') {
+            const guild = interaction.guild;
+            const totalMembers = guild.memberCount;
+            const bots = guild.members.cache.filter(m => m.user.bot).size;
+            const humans = totalMembers - bots;
+
+            const statusEmbed = new EmbedBuilder()
+                .setColor('Green')
+                .setTitle(`Thông tin server: ${guild.name}`)
+                .addFields(
+                    { name: 'Tổng số thành viên', value: `${totalMembers}`, inline: true },
+                    { name: 'Người', value: `${humans}`, inline: true },
+                    { name: 'Bot', value: `${bots}`, inline: true }
+                );
+            await interaction.reply({ embeds: [statusEmbed] });
+        }
+
+        else if (commandName === 'mute') {
+            const targetUser = options.getUser('target');
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            const timeString = options.getString('time');
+
+            let ms = 0;
+            if (timeString.endsWith('s')) ms = parseInt(timeString) * 1000;
+            else if (timeString.endsWith('m')) ms = parseInt(timeString) * 60000;
+            else if (timeString.endsWith('h')) ms = parseInt(timeString) * 3600000;
+            else if (timeString.endsWith('d')) ms = parseInt(timeString) * 86400000;
+
+            if (ms === 0 || isNaN(ms)) return interaction.reply({ content: 'Định dạng thời gian không hợp lệ.', ephemeral: true });
+
+            await targetMember.timeout(ms, 'Bị mute bởi Admin');
+            await interaction.reply({ content: `Đã mute ${targetUser.tag} trong ${timeString}.` });
+        }
+
+        else if (commandName === 'unmute') {
+            const targetUser = options.getUser('target');
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            await targetMember.timeout(null);
+            await interaction.reply({ content: `Đã bỏ mute cho ${targetUser.tag}.` });
+        }
+
+        else if (commandName === 'kick') {
+            const targetUser = options.getUser('target');
+            const targetMember = await interaction.guild.members.fetch(targetUser.id);
+            await targetMember.kick('Bị kick bởi Admin');
+            await interaction.reply({ content: `Đã kick ${targetUser.tag}.` });
+        }
+
+        else if (commandName === 'ban') {
+            const targetUser = options.getUser('target');
+            await interaction.guild.members.ban(targetUser.id, { deleteMessageSeconds: 604800, reason: 'Bị ban bởi Admin' });
+            await interaction.reply({ content: `Đã ban ${targetUser.tag} và xóa tin nhắn của họ trong 7 ngày qua.` });
+        }
+
+        else if (commandName === 'unban') {
+            const userId = options.getString('userid');
+            await interaction.guild.bans.remove(userId);
+            await interaction.reply({ content: `Đã unban người dùng có ID: ${userId}.` });
+        }
+
+    } catch (error) {
+        console.error(error);
+        const errorMsg = 'Đã xảy ra lỗi khi thực hiện lệnh này. (Có thể bot không đủ quyền, hoặc role của bot thấp hơn người bị xử lý).';
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content: errorMsg }).catch(() => {});
+        } else {
+            await interaction.reply({ content: errorMsg, ephemeral: true }).catch(() => {});
+        }
+    }
+});
+
+// ================= 3. XỬ LÝ LỆNH TIN NHẮN (CHỈ CÒN 1HELP) =================
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+    if (message.author.id !== ADMIN_ID) return;
+
+    if (message.content.trim().toLowerCase() === '1help') {
+        const helpEmbed = new EmbedBuilder()
+            .setColor('#0099ff')
+            .setTitle('Danh sách lệnh của Bot (Chỉ Admin)')
+            .setDescription('Tất cả các lệnh quản trị giờ đây đã được chuyển thành lệnh Slash (`/`). Hãy gõ `/` để xem danh sách lệnh.')
+            .addFields(
+                { name: '1help', value: 'Hiện danh sách lệnh này' },
+                { name: '/ticketsetup', value: 'Tạo bảng nút bấm hỗ trợ mua hàng' },
+                { name: '/translate', value: 'Dịch văn bản (Dùng được ở mọi nơi)' },
+                { name: '/qr', value: 'Gửi ảnh QR thanh toán (Dùng được ở mọi nơi)' },
+                { name: '/avt', value: 'Xem avatar (Dùng được ở mọi nơi)' },
+                { name: '/clear', value: 'Xóa tin nhắn' },
+                { name: '/nuke', value: 'Xóa và tạo lại kênh' },
+                { name: '/clean', value: 'Tạo kênh mới giống kênh hiện tại' },
+                { name: '/lock', value: 'Khóa kênh' },
+                { name: '/serverstatus', value: 'Xem thông tin server' },
+                { name: '/mute', value: 'Mute người dùng' },
+                { name: '/unmute', value: 'Bỏ mute' },
+                { name: '/kick', value: 'Kick người dùng' },
+                { name: '/ban', value: 'Ban người dùng' },
+                { name: '/unban', value: 'Unban người dùng' }
+            );
+        return message.reply({ embeds: [helpEmbed] });
+    }
+});
+
+// ================= 4. KHỞI TẠO WEB SERVER (Để treo trên Render Free Web Service) =================
+const http = require('http');
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Bot Discord đang hoạt động 24/7!');
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`[Web Server] Đang chạy trên port ${PORT}`);
+});
+
+// ================= 5. ĐĂNG NHẬP BOT =================
+const TOKEN = process.env.DISCORD_TOKEN || 'MTQ5ODI3MDM0MjMzNzEzNDY2Mw.GHiiXe.5GRXerafckZgF5KYxv-_is07Rbm7aGaNLXUULk';
+client.login(TOKEN);
