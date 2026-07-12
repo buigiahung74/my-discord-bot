@@ -686,38 +686,62 @@ client.on('messageCreate', async (message) => {
 
     // --- TỰ ĐỘNG PHẢN HỒI KHI CÓ NGƯỜI IB (DM) CHO BOT ---
     if (message.channel.type === ChannelType.DM) {
-        // Nếu là Admin nhắn tin '1help' thì vẫn xử lý như cũ
-        if (message.author.id === ADMIN_ID && message.content.trim().toLowerCase() === '1help') {
-            const helpEmbed = new EmbedBuilder()
-                .setColor('#0099ff')
-                .setTitle('Danh sách lệnh của Bot (Chỉ Admin)')
-                .setDescription('Tất cả các lệnh quản trị giờ đây đã được chuyển thành lệnh Slash (`/`). Hãy gõ `/` để xem danh sách lệnh.')
-                .addFields(
-                    { name: '1help', value: 'Hiện danh sách lệnh này' },
-                    { name: '/ticketsetup', value: 'Tạo bảng nút bấm hỗ trợ mua hàng' },
-                    { name: '/translate', value: 'Dịch văn bản (Dùng được ở mọi nơi)' },
-                    { name: '/qr', value: 'Gửi ảnh QR thanh toán (Dùng được ở mọi nơi)' },
-                    { name: '/avt', value: 'Xem avatar (Dùng được ở mọi nơi)' },
-                    { name: '/geticon', value: 'Lấy ảnh emoji/icon chất lượng cao (Dùng được ở mọi nơi)' },
-                    { name: '/ping', value: 'Kiểm tra độ trễ của Bot (Mọi nơi)' },
-                    { name: '/userinfo', value: 'Xem thông tin chi tiết một người dùng (Mọi nơi)' },
-                    { name: '/shorturl', value: 'Rút gọn một liên kết dài (Mọi nơi)' },
-                    { name: '/embed', value: 'Gửi tin nhắn khung Embed (Chỉ Admin)' },
-                    { name: '/clear', value: 'Xóa tin nhắn' },
-                    { name: '/nuke', value: 'Xóa và tạo lại kênh' },
-                    { name: '/clean', value: 'Tạo kênh mới giống kênh hiện tại' },
-                    { name: '/lock', value: 'Khóa kênh' },
-                    { name: '/serverstatus', value: 'Xem thông tin server' },
-                    { name: '/mute', value: 'Mute người dùng' },
-                    { name: '/unmute', value: 'Bỏ mute' },
-                    { name: '/kick', value: 'Kick người dùng' },
-                    { name: '/ban', value: 'Ban người dùng' },
-                    { name: '/unban', value: 'Unban người dùng' }
-                );
-            return message.reply({ embeds: [helpEmbed] });
+        // Tránh lập lại tin nhắn và vòng lặp nếu chính Admin nhắn tin cho bot
+        if (message.author.id === ADMIN_ID) {
+            // Nếu là Admin nhắn tin '1help' thì vẫn xử lý xem danh sách lệnh
+            if (message.content.trim().toLowerCase() === '1help') {
+                const helpEmbed = new EmbedBuilder()
+                    .setColor('#0099ff')
+                    .setTitle('Danh sách lệnh của Bot (Chỉ Admin)')
+                    .setDescription('Tất cả các lệnh quản trị giờ đây đã được chuyển thành lệnh Slash (`/`). Hãy gõ `/` để xem danh sách lệnh.')
+                    .addFields(
+                        { name: '1help', value: 'Hiện danh sách lệnh này' },
+                        { name: '/ticketsetup', value: 'Tạo bảng nút bấm hỗ trợ mua hàng' },
+                        { name: '/translate', value: 'Dịch văn bản (Dùng được ở mọi nơi)' },
+                        { name: '/qr', value: 'Gửi ảnh QR thanh toán (Dùng được ở mọi nơi)' },
+                        { name: '/avt', value: 'Xem avatar (Dùng được ở mọi nơi)' },
+                        { name: '/geticon', value: 'Lấy ảnh emoji/icon chất lượng cao (Dùng được ở mọi nơi)' },
+                        { name: '/ping', value: 'Kiểm tra độ trễ của Bot (Mọi nơi)' },
+                        { name: '/userinfo', value: 'Xem thông tin chi tiết một người dùng (Mọi nơi)' },
+                        { name: '/shorturl', value: 'Rút gọn một liên kết dài (Mọi nơi)' },
+                        { name: '/embed', value: 'Gửi tin nhắn khung Embed (Chỉ Admin)' },
+                        { name: '/clear', value: 'Xóa tin nhắn' },
+                        { name: '/nuke', value: 'Xóa và tạo lại kênh' },
+                        { name: '/clean', value: 'Tạo kênh mới giống kênh hiện tại' },
+                        { name: '/lock', value: 'Khóa kênh' },
+                        { name: '/serverstatus', value: 'Xem thông tin server' },
+                        { name: '/mute', value: 'Mute người dùng' },
+                        { name: '/unmute', value: 'Bỏ mute' },
+                        { name: '/kick', value: 'Kick người dùng' },
+                        { name: '/ban', value: 'Ban người dùng' },
+                        { name: '/unban', value: 'Unban người dùng' }
+                    );
+                return message.reply({ embeds: [helpEmbed] });
+            }
+            return; // Nếu Admin nhắn tin khác, không làm gì để tránh rác
         }
 
-        // Với người dùng khác ib cho bot, gửi menu tự động
+        // --- 1. CHUYỂN TIẾP TIN NHẮN IB ĐẾN DM CỦA ADMIN ---
+        const adminUser = await client.users.fetch(ADMIN_ID).catch(() => null);
+        if (adminUser) {
+            const forwardEmbed = new EmbedBuilder()
+                .setColor('#ffb7d2')
+                .setTitle('📨 TIN NHẮN INBOX MỚI')
+                .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
+                .setDescription(`👤 **Khách hàng:** <@${message.author.id}> (\`${message.author.tag}\`)\n🆔 **ID:** \`${message.author.id}\`\n\n💬 **Nội dung tin nhắn:**\n${message.content || '*(Không có nội dung chữ - Có thể là ảnh/sticker/emoji)*'}`)
+                .setTimestamp();
+            
+            // Lấy danh sách link ảnh/file đính kèm gửi kèm nếu có
+            const attachments = message.attachments.map(att => att.url);
+            const sendOptions = { embeds: [forwardEmbed] };
+            if (attachments.length > 0) {
+                sendOptions.content = `📎 **File đính kèm từ khách:**\n${attachments.join('\n')}`;
+            }
+
+            await adminUser.send(sendOptions).catch(err => console.error('Không thể chuyển tiếp tin nhắn đến Admin:', err));
+        }
+
+        // --- 2. GỬI MENU TRẢ LỜI TỰ ĐỘNG CHO KHÁCH ---
         const menuEmbed = new EmbedBuilder()
             .setColor('#ffb7d2') // Màu hồng pastel mặc định
             .setTitle('🤖 TRUNG TÂM PHẢN HỒI TỰ ĐỘNG')
