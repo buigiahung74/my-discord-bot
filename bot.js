@@ -503,6 +503,7 @@ client.on('interactionCreate', async (interaction) => {
 
         // Lệnh Embed (Chỉ dành cho Admin)
         else if (commandName === 'embed') {
+            await interaction.deferReply({ ephemeral: true });
             const title = options.getString('title');
             const description = options.getString('description').replace(/\\n/g, '\n');
             const colorInput = options.getString('color') || '#ffb7d2'; // Mặc định màu hồng pastel
@@ -559,10 +560,10 @@ client.on('interactionCreate', async (interaction) => {
                     messageOptions.allowedMentions = { parse: ['everyone'] };
                 }
                 await targetChannel.send(messageOptions);
-                await interaction.reply({ content: `✅ Đã gửi tin nhắn Embed đến kênh ${targetChannel} thành công!`, ephemeral: true });
+                await interaction.editReply({ content: `✅ Đã gửi tin nhắn Embed đến kênh ${targetChannel} thành công!` });
             } catch (err) {
                 console.error(err);
-                await interaction.reply({ content: `❌ Thất bại! Đảm bảo Bot có quyền gửi tin nhắn và xem kênh ${targetChannel}.`, ephemeral: true });
+                await interaction.editReply({ content: `❌ Thất bại! Đảm bảo Bot có quyền gửi tin nhắn và xem kênh ${targetChannel}.` });
             }
         }
 
