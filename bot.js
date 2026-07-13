@@ -142,6 +142,7 @@ client.on('ready', async () => {
             .addStringOption(option => option.setName('description').setDescription('Nội dung của Embed (Dùng \\n để xuống dòng)').setRequired(true))
             .addStringOption(option => option.setName('color').setDescription('Màu viền dạng Hex (mặc định màu hồng pastel)').setRequired(false))
             .addBooleanOption(option => option.setName('thumbnail').setDescription('Hiện ảnh server nhỏ ở góc phải (Mặc định: Bật)').setRequired(false))
+            .addBooleanOption(option => option.setName('ping_everyone').setDescription('Ping @everyone kèm theo tin nhắn (Mặc định: Tắt)').setRequired(false))
             .setIntegrationTypes([0]).setContexts([0])
     ];
 
@@ -506,6 +507,7 @@ client.on('interactionCreate', async (interaction) => {
             const description = options.getString('description').replace(/\\n/g, '\n');
             const colorInput = options.getString('color') || '#ffb7d2'; // Mặc định màu hồng pastel
             const showThumbnail = options.getBoolean('thumbnail') !== false; // Mặc định: Bật (true)
+            const pingEveryone = options.getBoolean('ping_everyone') === true;
             const targetChannel = interaction.channel;
             
             // Định dạng màu hex chuẩn
@@ -551,7 +553,12 @@ client.on('interactionCreate', async (interaction) => {
             }
                 
             try {
-                await targetChannel.send({ embeds: [embed], files: files });
+                const messageOptions = { embeds: [embed], files: files };
+                if (pingEveryone) {
+                    messageOptions.content = '@everyone';
+                    messageOptions.allowedMentions = { parse: ['everyone'] };
+                }
+                await targetChannel.send(messageOptions);
                 await interaction.reply({ content: `✅ Đã gửi tin nhắn Embed đến kênh ${targetChannel} thành công!`, ephemeral: true });
             } catch (err) {
                 console.error(err);
