@@ -140,7 +140,6 @@ client.on('ready', async () => {
             .setDescription('Gửi một tin nhắn dạng Embed (Chỉ Admin)')
             .addStringOption(option => option.setName('title').setDescription('Tiêu đề của Embed').setRequired(true))
             .addStringOption(option => option.setName('description').setDescription('Nội dung của Embed (Dùng \\n để xuống dòng)').setRequired(true))
-            .addChannelOption(option => option.setName('channel').setDescription('Chọn Kênh muốn gửi (mặc định là kênh hiện tại)').addChannelTypes(ChannelType.GuildText).setRequired(false))
             .addStringOption(option => option.setName('color').setDescription('Màu viền dạng Hex (mặc định màu hồng pastel)').setRequired(false))
             .addBooleanOption(option => option.setName('thumbnail').setDescription('Hiện ảnh server nhỏ ở góc phải (Mặc định: Bật)').setRequired(false))
             .setIntegrationTypes([0]).setContexts([0])
@@ -507,7 +506,7 @@ client.on('interactionCreate', async (interaction) => {
             const description = options.getString('description').replace(/\\n/g, '\n');
             const colorInput = options.getString('color') || '#ffb7d2'; // Mặc định màu hồng pastel
             const showThumbnail = options.getBoolean('thumbnail') !== false; // Mặc định: Bật (true)
-            const targetChannel = options.getChannel('channel') || interaction.channel;
+            const targetChannel = interaction.channel;
             
             // Định dạng màu hex chuẩn
             let color = colorInput;
