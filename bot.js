@@ -140,7 +140,7 @@ client.on('ready', async () => {
             .setDescription('Gửi một tin nhắn dạng Embed (Chỉ Admin)')
             .addStringOption(option => option.setName('title').setDescription('Tiêu đề của Embed').setRequired(true))
             .addStringOption(option => option.setName('description').setDescription('Nội dung của Embed (Dùng \\n để xuống dòng)').setRequired(true))
-            .addStringOption(option => option.setName('channel_id').setDescription('Chọn Kênh muốn gửi (Chỉ hiển thị kênh công khai)').setAutocomplete(true).setRequired(false))
+            .addChannelOption(option => option.setName('channel').setDescription('Chọn Kênh muốn gửi (mặc định là kênh hiện tại)').addChannelTypes(ChannelType.GuildText).setRequired(false))
             .addStringOption(option => option.setName('color').setDescription('Màu viền dạng Hex (mặc định màu hồng pastel)').setRequired(false))
             .addBooleanOption(option => option.setName('thumbnail').setDescription('Hiện ảnh server nhỏ ở góc phải (Mặc định: Bật)').setRequired(false))
             .setIntegrationTypes([0]).setContexts([0])
@@ -162,29 +162,6 @@ client.on('ready', async () => {
 
 // ================= 2. XỬ LÝ TƯƠNG TÁC (LỆNH SLASH & NÚT BẤM) =================
 client.on('interactionCreate', async (interaction) => {
-    
-    // ---------------- XỬ LÝ AUTOCOMPLETE ----------------
-    if (interaction.isAutocomplete()) {
-        if (interaction.commandName === 'embed') {
-            const focusedOption = interaction.options.getFocused(true);
-            
-            if (focusedOption.name === 'channel_id') {
-                if (interaction.guild) {
-                    const everyoneRole = interaction.guild.roles.everyone;
-                    // Lọc các kênh Chat text mà role @everyone có quyền xem (ViewChannel)
-                    const channels = interaction.guild.channels.cache
-                        .filter(c => c.type === ChannelType.GuildText && c.permissionsFor(everyoneRole).has(PermissionFlagsBits.ViewChannel))
-                        .map(c => ({ name: `#${c.name}`, value: c.id }));
-                    
-                    const filtered = channels.filter(c => c.name.toLowerCase().includes(focusedOption.value.toLowerCase())).slice(0, 25);
-                    await interaction.respond(filtered).catch(console.error);
-                } else {
-                    await interaction.respond([]).catch(console.error);
-                }
-            }
-        }
-        return;
-    }
     
     // ---------------- XỬ LÝ NÚT BẤM (TICKET) ----------------
     if (interaction.isButton()) {
@@ -530,16 +507,7 @@ client.on('interactionCreate', async (interaction) => {
             const description = options.getString('description').replace(/\\n/g, '\n');
             const colorInput = options.getString('color') || '#ffb7d2'; // Mặc định màu hồng pastel
             const showThumbnail = options.getBoolean('thumbnail') !== false; // Mặc định: Bật (true)
-            const channelId = options.getString('channel_id');
-            
-            let targetChannel = interaction.channel;
-            
-            if (channelId) {
-                targetChannel = interaction.guild.channels.cache.get(channelId);
-                if (!targetChannel) {
-                    return interaction.reply({ content: '❌ Không tìm thấy Kênh đã chọn.', ephemeral: true });
-                }
-            }
+            const targetChannel = options.getChannel('channel') || interaction.channel;
             
             // Định dạng màu hex chuẩn
             let color = colorInput;
