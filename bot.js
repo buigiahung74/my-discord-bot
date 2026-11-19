@@ -3,6 +3,8 @@ const {
     REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, 
     ButtonStyle, ChannelType, PermissionFlagsBits 
 } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 
 // Khởi tạo Client
 const client = new Client({
@@ -20,6 +22,32 @@ const client = new Client({
 const ADMIN_ID = process.env.ADMIN_ID || '1246646919678263380';
 // ID Danh mục (Category) để tạo kênh Ticket (Nếu để null sẽ tự do tạo)
 const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID || null;
+
+// File lưu cấu hình AutoRole cho từng Server
+const AUTOROLE_FILE = path.join(__dirname, 'autorole.json');
+function getAutoRoles() {
+    try {
+        if (fs.existsSync(AUTOROLE_FILE)) {
+            return JSON.parse(fs.readFileSync(AUTOROLE_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Lỗi đọc autorole.json:', e);
+    }
+    return {};
+}
+function setAutoRole(guildId, roleId) {
+    const roles = getAutoRoles();
+    if (roleId) {
+        roles[guildId] = roleId;
+    } else {
+        delete roles[guildId];
+    }
+    try {
+        fs.writeFileSync(AUTOROLE_FILE, JSON.stringify(roles, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Lỗi ghi autorole.json:', e);
+    }
+}
 
 
 
@@ -143,6 +171,25 @@ client.on('ready', async () => {
             .addStringOption(option => option.setName('color').setDescription('Màu viền dạng Hex (mặc định màu hồng pastel)').setRequired(false))
             .addBooleanOption(option => option.setName('thumbnail').setDescription('Hiện ảnh server nhỏ ở góc phải (Mặc định: Bật)').setRequired(false))
             .addBooleanOption(option => option.setName('ping_everyone').setDescription('Ping @everyone kèm theo tin nhắn (Mặc định: Tắt)').setRequired(false))
+            .setIntegrationTypes([0]).setContexts([0]),
+
+        new SlashCommandBuilder()
+            .setName('autorole')
+            .setDescription('Tự động cấp role khi có thành viên mới tham gia server')
+            .addSubcommand(sub =>
+                sub.setName('set')
+                    .setDescription('Cài đặt role tự động cấp cho người mới')
+                    .addRoleOption(option => option.setName('role').setDescription('Chọn role cần cấp').setRequired(true))
+            )
+            .addSubcommand(sub =>
+                sub.setName('off')
+                    .setDescription('Tắt tính năng tự động cấp role')
+            )
+            .addSubcommand(sub =>
+                sub.setName('check')
+                    .setDescription('Xem role tự động cấp hiện tại của server')
+            )
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
             .setIntegrationTypes([0]).setContexts([0])
     ];
 
@@ -654,6 +701,43 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.reply({ content: `Đã unban người dùng có ID: ${userId}.` });
         }
 
+        else if (commandName === 'autorole') {
+            const sub = options.getSubcommand();
+            if (sub === 'set') {
+                const role = options.getRole('role');
+                if (role.id === interaction.guild.id) {
+                    return interaction.reply({ content: '❌ Không thể chọn role @everyone làm AutoRole.', ephemeral: true });
+                }
+                const botMember = interaction.guild.members.me;
+                if (role.position >= botMember.roles.highest.position) {
+                    return interaction.reply({ 
+                        content: `⚠️ **Cảnh báo:** Role <@&${role.id}> đang cao hơn hoặc bằng vị trí vai trò của Bot.\nVui lòng vào **Cài đặt máy chủ -> Vai trò**, kéo role của Bot lên cao hơn role <@&${role.id}> thì Bot mới cấp được nhé!`,
+                        ephemeral: true 
+                    });
+                }
+                setAutoRole(interaction.guild.id, role.id);
+                const embed = new EmbedBuilder()
+                    .setColor('#00ff88')
+                    .setTitle('✅ Cài Đặt AutoRole Thành Công')
+                    .setDescription(`Từ bây giờ, mọi thành viên mới tham gia server sẽ tự động được cấp role: <@&${role.id}>`)
+                    .setFooter({ text: 'Lưu ý: Đảm bảo role của Bot luôn nằm trên role này' })
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed] });
+            } else if (sub === 'off') {
+                setAutoRole(interaction.guild.id, null);
+                await interaction.reply({ content: '✅ Đã tắt tính năng tự động cấp role cho thành viên mới.' });
+            } else if (sub === 'check') {
+                const roles = getAutoRoles();
+                const currentRoleId = roles[interaction.guild.id] || process.env.AUTOROLE_ID;
+                if (!currentRoleId) {
+                    await interaction.reply({ content: 'ℹ️ Server hiện chưa cài đặt AutoRole. Hãy dùng `/autorole set` để cài đặt nhé!' });
+                } else {
+                    const role = interaction.guild.roles.cache.get(currentRoleId);
+                    await interaction.reply({ content: `🎭 Role tự động cấp hiện tại của server: ${role ? `<@&${role.id}>` : `\`${currentRoleId}\` (Không tìm thấy trong server)`}` });
+                }
+            }
+        }
+
     } catch (error) {
         console.error(error);
         const errorMsg = 'Đã xảy ra lỗi khi thực hiện lệnh này. (Có thể bot không đủ quyền, hoặc role của bot thấp hơn người bị xử lý).';
@@ -662,6 +746,37 @@ client.on('interactionCreate', async (interaction) => {
         } else {
             await interaction.reply({ content: errorMsg, ephemeral: true }).catch(() => {});
         }
+    }
+});
+
+// ================= 2.5 SỰ KIỆN THÀNH VIÊN MỚI THAM GIA SERVER (AUTOROLE) =================
+client.on('guildMemberAdd', async (member) => {
+    try {
+        const roles = getAutoRoles();
+        const roleId = roles[member.guild.id] || process.env.AUTOROLE_ID;
+        if (!roleId) return;
+
+        const role = member.guild.roles.cache.get(roleId) || await member.guild.roles.fetch(roleId).catch(() => null);
+        if (!role) {
+            console.warn(`[AutoRole] Không tìm thấy role ID ${roleId} trong server ${member.guild.name}`);
+            return;
+        }
+
+        const botMember = member.guild.members.me;
+        if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            console.warn(`[AutoRole] Bot thiếu quyền ManageRoles trong server ${member.guild.name}`);
+            return;
+        }
+
+        if (role.position >= botMember.roles.highest.position) {
+            console.warn(`[AutoRole] Role ${role.name} cao hơn hoặc bằng vị trí role của Bot, không thể gán!`);
+            return;
+        }
+
+        await member.roles.add(role);
+        console.log(`[AutoRole] Đã tự động cấp role [${role.name}] cho thành viên mới: ${member.user.tag} trong server [${member.guild.name}]`);
+    } catch (error) {
+        console.error('[AutoRole] Lỗi khi cấp role cho thành viên mới:', error);
     }
 });
 
@@ -699,7 +814,8 @@ client.on('messageCreate', async (message) => {
                         { name: '/unmute', value: 'Bỏ mute' },
                         { name: '/kick', value: 'Kick người dùng' },
                         { name: '/ban', value: 'Ban người dùng' },
-                        { name: '/unban', value: 'Unban người dùng' }
+                        { name: '/unban', value: 'Unban người dùng' },
+                        { name: '/autorole', value: 'Tự động cấp role cho thành viên mới (set/off/check)' }
                     );
                 return message.reply({ embeds: [helpEmbed] });
             }
@@ -784,7 +900,8 @@ client.on('messageCreate', async (message) => {
                 { name: '/unmute', value: 'Bỏ mute' },
                 { name: '/kick', value: 'Kick người dùng' },
                 { name: '/ban', value: 'Ban người dùng' },
-                { name: '/unban', value: 'Unban người dùng' }
+                { name: '/unban', value: 'Unban người dùng' },
+                { name: '/autorole', value: 'Tự động cấp role cho thành viên mới (set/off/check)' }
             );
         return message.reply({ embeds: [helpEmbed] });
     }
