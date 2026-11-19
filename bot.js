@@ -17,7 +17,7 @@ const client = new Client({
 });
 
 // ID của Admin (Chủ Bot)
-const ADMIN_ID = process.env.ADMIN_ID || '1475874397175939225';
+const ADMIN_ID = process.env.ADMIN_ID || '1246646919678263380';
 // ID Danh mục (Category) để tạo kênh Ticket (Nếu để null sẽ tự do tạo)
 const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID || null;
 
