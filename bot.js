@@ -803,5 +803,9 @@ server.listen(PORT, () => {
 });
 
 // ================= 5. ĐĂNG NHẬP BOT =================
-const TOKEN = process.env.DISCORD_TOKEN || 'MTQ5ODI3MDM0MjMzNzEzNDY2Mw.GHiiXe.5GRXerafckZgF5KYxv-_is07Rbm7aGaNLXUULk';
+const TOKEN = process.env.DISCORD_TOKEN;
+if (!TOKEN) {
+    console.error('❌ Lỗi: Chưa thiết lập biến môi trường DISCORD_TOKEN!');
+    process.exit(1);
+}
 client.login(TOKEN);
